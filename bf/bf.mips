@@ -2,7 +2,7 @@
   err_msg_ip_overflow: .asciiz "Instruction pointer out of bounds"
   err_msg_mp_overflow: .asciiz "Memory pointer out of bounds"
   program:
-  	.asciiz .include "programs/echo.bf"
+  	.asciiz .include "programs/echo.b"
 program_end:
 memory: .space 30000
 memory_end:
