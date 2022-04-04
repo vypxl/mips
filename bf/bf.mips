@@ -1,0 +1,209 @@
+.data
+  err_msg_ip_overflow: .asciiz "Instruction pointer out of bounds"
+  err_msg_mp_overflow: .asciiz "Memory pointer out of bounds"
+  program:
+  	.asciiz .include "programs/echo.bf"
+program_end:
+memory: .space 30000
+memory_end:
+
+.text
+.globl main
+
+main:
+    la $s0, program # s0: Instruction pointer
+    la $s1, memory  # s1: Memory Pointer
+
+execute:
+  # check that IP is in-bounds
+  la $t3, program_end
+  beq $s0, $t3, exit # exit peacefully if IP is exactly program_end
+  slt $t4, $s0, $t3 # t4 = ip < program_end + 1
+  blez $t4, error_ip_overflow # Jump if not
+  la $t3, program
+  addi $t5, $s0, 1  # t5 = s0 + 1
+  slt $t4, $t3, $t5  # t4 = program < ip + 1
+  blez $t4, error_ip_overflow
+
+  # check that MP is in bounds
+  la $t3, memory_end
+  slt $t4, $s1, $t3 # t4 = mp < memory_end
+  blez $t4, error_mp_overflow # Jump if not
+  la $t3, memory
+  addi $t5, $s1, 1  # t5 = s1 + 1
+  slt $t4, $t3, $t5  # t4 = memory < ip + 1
+  blez $t4, error_mp_overflow # Jump if not
+
+  lb $t0, 0($s0)    # Load current instruction
+  addi $s0, $s0, 1  # Increment instruction pointer
+
+  # Decode and execute instruction
+  li $t1, '+'
+  beq $t0, $t1, increment
+
+  li $t1, '-'
+  beq $t0, $t1, decrement
+
+  li $t1, '<'
+  beq $t0, $t1, move_left
+
+  li $t1, '>'
+  beq $t0, $t1, move_right
+
+  li $t1, ','
+  beq $t0, $t1, read
+
+  li $t1, '.'
+  beq $t0, $t1, print
+
+  li $t1, '['
+  beq $t0, $t1, loop_start
+
+  li $t1, ']'
+  beq $t0, $t1, loop_end
+
+  j execute
+
+go_left:
+  addi $s1, $s1, -1 # Decrement memory pointer
+  j execute
+
+go_right:
+  addi $s1, $s1, 1 # Increment memory pointer
+  j execute
+
+increment:
+  lb $t1, 0($s1)   # Load value from memory
+  addi $t1, $t1, 1 # Increment value
+  sb $t1, 0($s1)   # Store value back
+  j execute
+
+decrement:
+  lb $t1, 0($s1)    # Load value from memory
+  addi $t1, $t1, -1 # Decrement value
+  sb $t1, 0($s1)    # Store value back
+  j execute
+
+move_right:
+  addi $s1, $s1, 1      # Increment MP
+  j execute
+
+move_left:
+  addi $s1, $s1, -1     # Decrement MP
+  j execute
+
+print:
+  lb $a0, 0($s1)   # Load value from memory
+  li $v0, 11
+  syscall          # Print out char
+  j execute
+
+read:
+  li $v0, 12
+  syscall          # Read in char
+  sb $v0, 0($s1)   # Store into memory
+  j execute
+
+loop_start:
+  lb $t1, 0($s1)   # Load value from memory
+  li $t2, 0        # Load a 0 into $t2
+  beq $t1, $t2, find_closing_bracket     # Find matching bracket if the value is equal to 0
+  j execute
+
+loop_end:
+  lb $t1, 0($s1)  # Load value from memory
+  li $t2, 0       # Load a 0 into $t2
+  bne $t1, $t2, find_opening_bracket
+  j execute
+
+find_closing_bracket:
+  li $t0, 0       # Nesting counter
+  li $t1, '['
+  li $t2, ']'
+
+  addi $s0, $s0, -1 # Decrement IP to properly start
+  # while (! (ins == ']' && nest == 0))
+  find_closing_bracket_loop:
+    addi $s0, $s0, 1 # Increment IP
+
+    # check that IP is in-bounds
+    la $t3, program_end
+    slt $t4, $s0, $t3 # t4 = ip < program_end
+    blez $t4, error_ip_overflow # Jump if not
+
+    lb $t5, 0($s0)   # Load instruction
+
+    bgtz $t0, find_closing_bracket_loop_next    # Skip check for end if nest is not 0
+    beq $t5, $t2, find_closing_bracket_loop_end # End loop when closing bracket found
+
+    find_closing_bracket_loop_next:
+    beq $t5, $t1, find_closing_bracket_loop_inc
+    beq $t5, $t2, find_closing_bracket_loop_dec
+    j find_closing_bracket_loop
+
+    find_closing_bracket_loop_inc:
+    addi $t0, $t0, 1
+    j find_closing_bracket_loop
+
+    find_closing_bracket_loop_dec:
+    addi $t0, $t0, -1
+    j find_closing_bracket_loop
+
+  find_closing_bracket_loop_end:
+  addi $s0, $s0, 1 # Skip the closing ]
+  j execute
+
+find_opening_bracket:
+  li $t0, 0       # Nesting counter
+  li $t1, '['
+  li $t2, ']'
+
+  addi $s0, $s0, -1 # Decrement IP once before starting the loop to avoid false nest counting
+
+  # while (! (ins == '[' && nest == 0))
+  find_opening_bracket_loop:
+    addi $s0, $s0, -1 # Decrement IP
+
+    # check that IP is in-bounds
+    la $t3, program
+    addi $t5, $s0, 1  # t5 = s0 + 1
+    slt $t4, $t3, $t5 # t4 = program < ip + 1
+    blez $t4, error_ip_overflow
+
+    lb $t5, 0($s0)    # Load instruction
+
+    bgtz $t0, find_opening_bracket_loop_next    # Skip check for end if nest is not 0
+    beq $t5, $t1, find_opening_bracket_loop_end # End loop when closing bracket found
+
+    find_opening_bracket_loop_next:
+    beq $t5, $t2, find_opening_bracket_loop_inc
+    beq $t5, $t1, find_opening_bracket_loop_dec
+    j find_opening_bracket_loop
+
+    find_opening_bracket_loop_inc:
+    addi $t0, $t0, 1
+    j find_opening_bracket_loop
+
+    find_opening_bracket_loop_dec:
+    addi $t0, $t0, -1
+    j find_opening_bracket_loop
+
+  find_opening_bracket_loop_end:
+  addi $s0, $s0, 1 # Skip the opening [
+  j execute
+
+error_ip_overflow:
+  li $v0, 4       # command for printing a string
+  la $a0, err_msg_ip_overflow # load message
+  syscall         # print message
+  j exit
+
+error_mp_overflow:
+  li $v0, 4       # command for printing a string
+  la $a0, err_msg_ip_overflow # load message
+  syscall         # print message
+  j exit
+
+exit:
+li $v0, 10
+syscall
