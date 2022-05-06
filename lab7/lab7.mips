@@ -1,0 +1,27 @@
+#
+# Calculate sum from A to B.
+#
+# Authors: 
+#	X Y, Z Q 
+#
+# Group: ...
+#
+.text
+main:
+  addi $t0, $zero, 10
+  addi $t1, $zero, 0
+  addi $t2, $zero, 0
+  
+  # Algorithm
+  loop:
+    # Check if A ($t0) <= B ($t1)
+    addi $t0, $t0, -1
+    slt $t5, $t0, $t1
+    beq $t5, $zero, end
+    addi $t0, $t0, 1
+
+    # Add
+    add $t2, $t2, $t0
+    addi $t0, $t0, 1
+    j loop
+end:
